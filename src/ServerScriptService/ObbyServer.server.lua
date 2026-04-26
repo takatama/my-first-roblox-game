@@ -181,6 +181,11 @@ local function startMovingParts()
 end
 
 local function celebrateGoal(player)
+	local runStartedAt = player:GetAttribute("RunStartedAt")
+	if runStartedAt and not player:GetAttribute("GoalTime") then
+		player:SetAttribute("GoalTime", workspace:GetServerTimeNow() - runStartedAt)
+	end
+
 	local now = os.clock()
 	local lastCelebrate = player:GetAttribute("LastGoalCelebrate") or 0
 	if now - lastCelebrate < Config.GoalCelebrateCooldown then
@@ -273,6 +278,8 @@ end
 
 local function setupPlayer(player)
 	player:SetAttribute("CheckpointIndex", 1)
+	player:SetAttribute("RunStartedAt", workspace:GetServerTimeNow())
+	player:SetAttribute("GoalTime", nil)
 
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
