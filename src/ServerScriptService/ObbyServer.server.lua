@@ -2,8 +2,11 @@ local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.ObbyConfig)
+
+Players.RespawnTime = Config.DeathRespawnTime
 
 local mapFolder = workspace:FindFirstChild("ObbyMap")
 if mapFolder then
@@ -15,19 +18,20 @@ mapFolder.Name = "ObbyMap"
 mapFolder.Parent = workspace
 
 local checkpointParts = {}
+local movingParts = {}
 
 local function playerFromHit(hit)
 	local character = hit:FindFirstAncestorOfClass("Model")
 	if not character then
-		return nil, nil
+		return nil, nil, nil
 	end
 
 	local humanoid = character:FindFirstChild("Humanoid")
 	if not humanoid then
-		return nil, nil
+		return nil, nil, nil
 	end
 
-	return Players:GetPlayerFromCharacter(character), humanoid
+	return Players:GetPlayerFromCharacter(character), humanoid, character
 end
 
 local function makePart(name, position, size, color)
@@ -41,6 +45,139 @@ local function makePart(name, position, size, color)
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Parent = mapFolder
 	return part
+end
+
+local function playCheckpointGlow(part)
+	local now = os.clock()
+	local lastGlow = part:GetAttribute("LastGlow") or 0
+	if now - lastGlow < Config.CheckpointGlowCooldown then
+		return
+	end
+
+	part:SetAttribute("LastGlow", now)
+
+	local originalColor = part.Color
+	local originalSize = part.Size
+	local glowLight = Instance.new("PointLight")
+	glowLight.Name = "Checkpoint Glow"
+	glowLight.Color = Config.CheckpointGlowColor
+	glowLight.Brightness = 0
+	glowLight.Range = 0
+	glowLight.Parent = part
+
+	local glowInfo = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local fadeInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
+	TweenService:Create(part, glowInfo, {
+		Color = Config.CheckpointGlowColor,
+		Size = originalSize + Vector3.new(1.5, 0.25, 1.5),
+	}):Play()
+	TweenService:Create(glowLight, glowInfo, {
+		Brightness = 5,
+		Range = 18,
+	}):Play()
+
+	task.delay(0.18, function()
+		if not part.Parent then
+			return
+		end
+
+		TweenService:Create(part, fadeInfo, {
+			Color = originalColor,
+			Size = originalSize,
+		}):Play()
+		TweenService:Create(glowLight, fadeInfo, {
+			Brightness = 0,
+			Range = 0,
+		}):Play()
+	end)
+
+	Debris:AddItem(glowLight, 1)
+end
+
+local function playGoalCheer(position)
+	local soundPart = Instance.new("Part")
+	soundPart.Name = "Goal Cheer Sound"
+	soundPart.Anchored = true
+	soundPart.CanCollide = false
+	soundPart.Transparency = 1
+	soundPart.Position = position
+	soundPart.Parent = mapFolder
+
+	local sound = Instance.new("Sound")
+	sound.Name = "Goal Cheer"
+	sound.SoundId = Config.GoalCheerSoundId
+	sound.Volume = 0.8
+	sound.RollOffMaxDistance = 90
+	sound.Parent = soundPart
+	sound:Play()
+
+	Debris:AddItem(soundPart, 8)
+end
+
+local function isRootPartOverPart(rootPart, part)
+	local localPosition = part.CFrame:PointToObjectSpace(rootPart.Position)
+	local halfSize = part.Size / 2
+
+	return math.abs(localPosition.X) <= halfSize.X
+		and math.abs(localPosition.Z) <= halfSize.Z
+		and localPosition.Y >= halfSize.Y
+end
+
+local function canReachCheckpoint(player, humanoid, character, checkpointPart)
+	if not player or humanoid.Health <= 0 then
+		return false
+	end
+
+	local lastObstacleHit = player:GetAttribute("LastObstacleHit") or 0
+	if os.clock() - lastObstacleHit < Config.CheckpointConfirmDelay then
+		return false
+	end
+
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	return rootPart and isRootPartOverPart(rootPart, checkpointPart)
+end
+
+local function addMovingPart(part, offsets, moveTime)
+	table.insert(movingParts, {
+		part = part,
+		startCFrame = part.CFrame,
+		offsets = offsets,
+		moveTime = moveTime,
+	})
+end
+
+local function startMovingParts()
+	if #movingParts == 0 then
+		return
+	end
+
+	local moveTime = movingParts[1].moveTime
+	local tweenInfo = TweenInfo.new(moveTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+
+	task.spawn(function()
+		while true do
+			for _, offset in ipairs(movingParts[1].offsets) do
+				for _, movingPart in ipairs(movingParts) do
+					if movingPart.part.Parent then
+						TweenService:Create(movingPart.part, tweenInfo, {
+							CFrame = movingPart.startCFrame + offset,
+						}):Play()
+					end
+				end
+
+				task.wait(moveTime)
+
+				for _, movingPart in ipairs(movingParts) do
+					if movingPart.part.Parent then
+						TweenService:Create(movingPart.part, tweenInfo, { CFrame = movingPart.startCFrame }):Play()
+					end
+				end
+
+				task.wait(moveTime)
+			end
+		end
+	end)
 end
 
 local function celebrateGoal(player)
@@ -80,17 +217,20 @@ local function celebrateGoal(player)
 
 		Debris:AddItem(confetti, 7)
 	end
+
+	playGoalCheer(basePosition)
 end
 
 local function checkpointCFrame(index)
 	local checkpoint = Config.Checkpoints[index] or Config.Checkpoints[1]
-	return CFrame.new(checkpoint.position + Vector3.new(0, Config.RespawnHeight, 0))
+	local position = checkpoint.position + Vector3.new(0, Config.RespawnHeight, 0)
+	return CFrame.lookAt(position, position + Config.RespawnFacingDirection)
 end
 
 local function updateCheckpoint(player, index)
 	local currentIndex = player:GetAttribute("CheckpointIndex") or 1
 	if index <= currentIndex then
-		return
+		return false
 	end
 
 	player:SetAttribute("CheckpointIndex", index)
@@ -100,6 +240,8 @@ local function updateCheckpoint(player, index)
 	if stageValue then
 		stageValue.Value = index
 	end
+
+	return true
 end
 
 local function respawnAtCheckpoint(player)
@@ -153,24 +295,41 @@ for index, checkpoint in ipairs(Config.Checkpoints) do
 	checkpointParts[index] = part
 
 	part.Touched:Connect(function(hit)
-		local player = playerFromHit(hit)
-		if player then
-			updateCheckpoint(player, index)
+		local player, humanoid, character = playerFromHit(hit)
+		if not player then
+			return
+		end
+
+		task.delay(Config.CheckpointConfirmDelay, function()
+			if not canReachCheckpoint(player, humanoid, character, part) then
+				return
+			end
+
+			local reachedNewCheckpoint = updateCheckpoint(player, index)
+			if reachedNewCheckpoint and index < #Config.Checkpoints then
+				playCheckpointGlow(part)
+			end
 
 			if index == #Config.Checkpoints then
 				celebrateGoal(player)
 			end
-		end
+		end)
 	end)
 end
 
 for index, platform in ipairs(Config.Platforms) do
-	makePart("Platform " .. index, platform.position, platform.size, Config.Colors.Platform)
+	local part = makePart("Platform " .. index, platform.position, platform.size, Config.Colors.Platform)
+	if platform.moveOffsets then
+		addMovingPart(part, platform.moveOffsets, platform.moveTime)
+	end
 end
 
 for index, obstacle in ipairs(Config.Obstacles) do
 	local part = makePart("Jump Obstacle " .. index, obstacle.position, obstacle.size, Config.Colors.Danger)
 	part.Material = Enum.Material.Neon
+	if obstacle.moveOffsets then
+		addMovingPart(part, obstacle.moveOffsets, obstacle.moveTime)
+	end
 
 	part.Touched:Connect(function(hit)
 		local player, humanoid = playerFromHit(hit)
@@ -188,6 +347,8 @@ for index, obstacle in ipairs(Config.Obstacles) do
 		humanoid.Health = 0
 	end)
 end
+
+startMovingParts()
 
 RunService.Heartbeat:Connect(function()
 	for _, player in ipairs(Players:GetPlayers()) do
