@@ -12,6 +12,9 @@ ObbyConfig.CheckpointConfirmDelay = 0.08
 ObbyConfig.GoalCelebrateCooldown = 5
 ObbyConfig.CheckpointGlowCooldown = 0.8
 ObbyConfig.CheckpointGlowColor = Color3.fromRGB(80, 255, 140)
+ObbyConfig.BgmSoundId = "rbxassetid://127649117728805"
+ObbyConfig.CheckpointSoundId = "rbxassetid://137991482731236"
+ObbyConfig.JumpSoundId = "rbxassetid://88702393538382"
 ObbyConfig.GoalCheerSoundId = "rbxassetid://7755719721"
 
 ObbyConfig.Colors = {

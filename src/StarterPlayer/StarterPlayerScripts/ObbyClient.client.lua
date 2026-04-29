@@ -1,16 +1,37 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
 
 local Config = require(ReplicatedStorage.Shared.ObbyConfig)
 
 local player = Players.LocalPlayer
+
+local bgm = Instance.new("Sound")
+bgm.Name = "Obby BGM"
+bgm.SoundId = Config.BgmSoundId
+bgm.Volume = 0.35
+bgm.Looped = true
+bgm.Parent = SoundService
+bgm:Play()
+
+local jumpSound = Instance.new("Sound")
+jumpSound.Name = "Jump SE"
+jumpSound.SoundId = Config.JumpSoundId
+jumpSound.Volume = 0.45
+jumpSound.Parent = SoundService
 
 local function applyMovement(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	humanoid.WalkSpeed = Config.WalkSpeed
 	humanoid.JumpPower = Config.JumpPower
 	humanoid.UseJumpPower = true
+
+	humanoid.Jumping:Connect(function(isJumping)
+		if isJumping then
+			jumpSound:Play()
+		end
+	end)
 end
 
 local function makeStageGui()

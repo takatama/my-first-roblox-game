@@ -95,6 +95,18 @@ local function playCheckpointGlow(part)
 	Debris:AddItem(glowLight, 1)
 end
 
+local function playCheckpointSound(part)
+	local sound = Instance.new("Sound")
+	sound.Name = "Checkpoint SE"
+	sound.SoundId = Config.CheckpointSoundId
+	sound.Volume = 0.7
+	sound.RollOffMaxDistance = 70
+	sound.Parent = part
+	sound:Play()
+
+	Debris:AddItem(sound, 4)
+end
+
 local function playGoalCheer(position)
 	local soundPart = Instance.new("Part")
 	soundPart.Name = "Goal Cheer Sound"
@@ -315,6 +327,7 @@ for index, checkpoint in ipairs(Config.Checkpoints) do
 			local reachedNewCheckpoint = updateCheckpoint(player, index)
 			if reachedNewCheckpoint and index < #Config.Checkpoints then
 				playCheckpointGlow(part)
+				playCheckpointSound(part)
 			end
 
 			if index == #Config.Checkpoints then
