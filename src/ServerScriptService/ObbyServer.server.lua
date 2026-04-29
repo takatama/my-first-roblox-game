@@ -20,6 +20,13 @@ mapFolder.Parent = workspace
 local checkpointParts = {}
 local movingParts = {}
 
+local checkpointReachedEvent = ReplicatedStorage:FindFirstChild("CheckpointReached")
+if not checkpointReachedEvent then
+	checkpointReachedEvent = Instance.new("RemoteEvent")
+	checkpointReachedEvent.Name = "CheckpointReached"
+	checkpointReachedEvent.Parent = ReplicatedStorage
+end
+
 local function playerFromHit(hit)
 	local character = hit:FindFirstAncestorOfClass("Model")
 	if not character then
@@ -93,18 +100,6 @@ local function playCheckpointGlow(part)
 	end)
 
 	Debris:AddItem(glowLight, 1)
-end
-
-local function playCheckpointSound(part)
-	local sound = Instance.new("Sound")
-	sound.Name = "Checkpoint SE"
-	sound.SoundId = Config.CheckpointSoundId
-	sound.Volume = 0.7
-	sound.RollOffMaxDistance = 70
-	sound.Parent = part
-	sound:Play()
-
-	Debris:AddItem(sound, 4)
 end
 
 local function playGoalCheer(position)
@@ -327,7 +322,7 @@ for index, checkpoint in ipairs(Config.Checkpoints) do
 			local reachedNewCheckpoint = updateCheckpoint(player, index)
 			if reachedNewCheckpoint and index < #Config.Checkpoints then
 				playCheckpointGlow(part)
-				playCheckpointSound(part)
+				checkpointReachedEvent:FireClient(player)
 			end
 
 			if index == #Config.Checkpoints then

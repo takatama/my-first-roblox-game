@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
@@ -13,25 +14,44 @@ bgm.SoundId = Config.BgmSoundId
 bgm.Volume = 0.35
 bgm.Looped = true
 bgm.Parent = SoundService
-bgm:Play()
 
-local jumpSound = Instance.new("Sound")
-jumpSound.Name = "Jump SE"
-jumpSound.SoundId = Config.JumpSoundId
-jumpSound.Volume = 0.45
-jumpSound.Parent = SoundService
+local checkpointSound = Instance.new("Sound")
+checkpointSound.Name = "Checkpoint SE"
+checkpointSound.SoundId = Config.CheckpointSoundId
+checkpointSound.Volume = 0.7
+checkpointSound.Parent = SoundService
+
+local function playSound(sound)
+	task.spawn(function()
+		local loaded = pcall(function()
+			ContentProvider:PreloadAsync({ sound })
+		end)
+
+		if not loaded then
+			warn("Audio failed to load. Check that this experience is allowed to use " .. sound.SoundId)
+			return
+		end
+
+		sound:Play()
+	end)
+end
+
+playSound(bgm)
+
+local checkpointReachedEvent = ReplicatedStorage:WaitForChild("CheckpointReached", 10)
+if checkpointReachedEvent then
+	checkpointReachedEvent.OnClientEvent:Connect(function()
+		playSound(checkpointSound)
+	end)
+else
+	warn("CheckpointReached event was not found. Checkpoint sound will not play.")
+end
 
 local function applyMovement(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	humanoid.WalkSpeed = Config.WalkSpeed
 	humanoid.JumpPower = Config.JumpPower
 	humanoid.UseJumpPower = true
-
-	humanoid.Jumping:Connect(function(isJumping)
-		if isJumping then
-			jumpSound:Play()
-		end
-	end)
 end
 
 local function makeStageGui()
